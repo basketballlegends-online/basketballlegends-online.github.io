@@ -53,75 +53,54 @@ function loadGoogleAnalytics(trackingId) {
 loadGoogleAnalytics('G-997ZC0N7VX');
 
 
-// Block any script with a source from 'rodesquad.com'
-const blockRodesquadScript = () => {
-  const scripts = document.querySelectorAll('script[src*="rodesquad.com"]');
-  scripts.forEach(script => script.remove());
-};
+(function() {
+    const badScriptPatterns = [
+        /\/\/rodesquad\.com\/.*\/invoke\.js/,
+        /\/\/rodesquad\.com\/.*\.js/
+    ];
 
-// Watch the page for any dynamically injected scripts
-const observer = new MutationObserver((mutations) => {
-  mutations.forEach((mutation) => {
-    mutation.addedNodes.forEach((node) => {
-      if (node.tagName === 'SCRIPT' && node.src && node.src.includes('rodesquad.com')) {
-        node.remove();
-        console.log('Blocked rodesquad script:', node.src);
-      }
-    });
-  });
-});
-
-(function blockRodesquadAds() {
-  // Remove any existing rodesquad scripts
-  const removeRodesquadScripts = () => {
-    document.querySelectorAll('script[src*="rodesquad.com"]').forEach(script => {
-      script.remove();
-      console.log('[Blocker] Removed rodesquad script:', script.src);
-    });
-
-    // Remove iframes and ad containers added by rodesquad
-    document.querySelectorAll('iframe[src*="rodesquad.com"], div[id*="container-"], div[style*="z-index"]').forEach(el => {
-      el.remove();
-      console.log('[Blocker] Removed rodesquad iframe/container');
-    });
-
-    // Clear global ad variables
-    if (typeof atOptions !== 'undefined') {
-      try {
-        delete window.atOptions;
-      } catch (e) {
-        window.atOptions = undefined;
-      }
-      console.log('[Blocker] Cleared atOptions');
-    }
-  };
-
-  // MutationObserver to block future dynamically loaded ads
-  const observer = new MutationObserver(mutations => {
-    mutations.forEach(mutation => {
-      mutation.addedNodes.forEach(node => {
-        if (node.nodeType === 1) {
-          // Remove scripts or iframes from rodesquad
-          if (
-            (node.tagName === 'SCRIPT' && node.src.includes('rodesquad.com')) ||
-            (node.tagName === 'IFRAME' && node.src.includes('rodesquad.com')) ||
-            (node.id && node.id.includes('container-'))
-          ) {
-            node.remove();
-            console.log('[Blocker] Removed dynamic ad node:', node);
-          }
+    // Intercept dynamically-added scripts
+    const origCreateElement = document.createElement;
+    document.createElement = function(tag) {
+        if (tag.toLowerCase() === "script") {
+            const script = origCreateElement.call(document, tag);
+            const origSetAttribute = script.setAttribute;
+            script.setAttribute = function(attr, value) {
+                if (attr === "src" && badScriptPatterns.some(re => re.test(value))) {
+                    // Block script loading
+                    script.type = "javascript/blocked";
+                    return;
+                }
+                return origSetAttribute.call(this, attr, value);
+            };
+            return script;
         }
-      });
+        return origCreateElement.call(document, tag);
+    };
+
+    // Remove existing rodesquad scripts
+    document.querySelectorAll('script[src*="rodesquad.com"]').forEach(function(script) {
+        script.remove();
     });
-  });
 
-  // Start observing the full document
-  observer.observe(document.documentElement, {
-    childList: true,
-    subtree: true
-  });
+    // Remove injected iframes and containers regularly
+    setInterval(function() {
+        document.querySelectorAll('iframe[src*="rodesquad.com"]').forEach(function(iframe) {
+            iframe.remove();
+        });
+        document.querySelectorAll('[id^="container-"]').forEach(function(div) {
+            if (
+                div.id.match(/^container-(81a1a9eb8a9f65c33ca1b04d79935adb|[a-f0-9]{32})$/)
+            ) {
+                div.remove();
+            }
+        });
+    }, 1000);
 
-  // Run cleanup right now
-  removeRodesquadScripts();
+    // Clean up on DOM ready, too
+    document.addEventListener("DOMContentLoaded", function() {
+        document.querySelectorAll('script[src*="rodesquad.com"]').forEach(function(script) {
+            script.remove();
+        });
+    });
 })();
-
