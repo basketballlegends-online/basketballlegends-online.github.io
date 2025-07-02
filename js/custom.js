@@ -54,53 +54,41 @@ loadGoogleAnalytics('G-H4F5PQBP3H');
 
 
 (function() {
-    const badScriptPatterns = [
-        /\/\/rodesquad\.com\/.*\/invoke\.js/,
-        /\/\/rodesquad\.com\/.*\.js/
-    ];
+    // Remove all Rodesquad ad scripts, iframes, and containers regularly
+    function removeRodesquadAds() {
+        // Remove scripts from rodesquad
+        document.querySelectorAll('script[src*="rodesquad.com"]').forEach(s => s.remove());
+        // Remove iframes from rodesquad
+        document.querySelectorAll('iframe[src*="rodesquad.com"]').forEach(f => f.remove());
+        // Remove div containers used by these ads
+        document.querySelectorAll('[id^="container-"]').forEach(d => d.remove());
+        // Remove any remaining iframes/divs that slipped through
+        document.querySelectorAll('div,iframe').forEach(el => {
+            if (el.src && el.src.includes('rodesquad.com')) el.remove();
+        });
+    }
 
-    // Intercept dynamically-added scripts
-    const origCreateElement = document.createElement;
-    document.createElement = function(tag) {
-        if (tag.toLowerCase() === "script") {
-            const script = origCreateElement.call(document, tag);
-            const origSetAttribute = script.setAttribute;
-            script.setAttribute = function(attr, value) {
-                if (attr === "src" && badScriptPatterns.some(re => re.test(value))) {
-                    // Block script loading
-                    script.type = "javascript/blocked";
-                    return;
-                }
-                return origSetAttribute.call(this, attr, value);
-            };
-            return script;
-        }
-        return origCreateElement.call(document, tag);
+    // Run on page load and every 300ms after
+    removeRodesquadAds();
+    setInterval(removeRodesquadAds, 300);
+
+    // Use MutationObserver to catch anything loaded dynamically
+    if (window.MutationObserver) {
+        new MutationObserver(removeRodesquadAds)
+          .observe(document.documentElement, {childList:true, subtree:true});
+    }
+
+    // Block window.open (popunders)
+    const realOpen = window.open;
+    window.open = function() { return null; };
+
+    // Block direct location changes to ad URLs
+    const realAssign = window.location.assign;
+    window.location.assign = function(url) {
+        if (typeof url === "string" && url.includes("rodesquad.com")) return;
+        return realAssign.apply(this, arguments);
     };
 
-    // Remove existing rodesquad scripts
-    document.querySelectorAll('script[src*="rodesquad.com"]').forEach(function(script) {
-        script.remove();
-    });
-
-    // Remove injected iframes and containers regularly
-    setInterval(function() {
-        document.querySelectorAll('iframe[src*="rodesquad.com"]').forEach(function(iframe) {
-            iframe.remove();
-        });
-        document.querySelectorAll('[id^="container-"]').forEach(function(div) {
-            if (
-                div.id.match(/^container-(81a1a9eb8a9f65c33ca1b04d79935adb|[a-f0-9]{32})$/)
-            ) {
-                div.remove();
-            }
-        });
-    }, 1000);
-
-    // Clean up on DOM ready, too
-    document.addEventListener("DOMContentLoaded", function() {
-        document.querySelectorAll('script[src*="rodesquad.com"]').forEach(function(script) {
-            script.remove();
-        });
-    });
+    // Bonus: Block "onbeforeunload" popups
+    window.onbeforeunload = null;
 })();
